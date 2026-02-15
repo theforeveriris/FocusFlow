@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusFlow - 生产力管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+            },
+            matrix: {
+              q1: '#ef4444',
+              q2: '#f59e0b',
+              q3: '#3b82f6',
+              q4: '#6b7280',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans SC', 'system-ui'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif; background-color: #f9fafb; }
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .card-hover { transition: all 0.2s ease-out; }
+    .card-hover:hover { border-color: #3b82f6; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const { createApp, ref, computed, onMounted } = Vue;
+    const { createRouter, createWebHashHistory } = VueRouter;
+
+    // Sample Data
+    const sampleProjects = [
+      { id: 1, name: '个人学习', description: '学习新技能和个人提升', color: '#3b82f6', progress: 45, plan_count: 2 },
+      { id: 2, name: '工作任务', description: '日常工作任务管理', color: '#ef4444', progress: 60, plan_count: 1 },
+      { id: 3, name: '健身计划', description: '保持健康和锻炼', color: '#10b981', progress: 30, plan_count: 1 },
+    ];
+
+    const samplePlans = [
+      { id: 1, title: '完成Vue3项目', description: '学习Vue3 Composition API并实践', priority_matrix: 'not_urgent_important', status: 'in_progress', project_name: '个人学习', actual_duration: 60 },
+      { id: 2, title: '阅读技术书籍', description: '阅读《Clean Code》', priority_matrix: 'not_urgent_important', status: 'todo', project_name: '个人学习', actual_duration: 0 },
+      { id: 3, title: '完成周报', description: '整理本周工作进度', priority_matrix: 'urgent_important', status: 'completed', project_name: '工作任务', actual_duration: 25 },
+      { id: 4, title: '晨跑5公里', description: '早起跑步锻炼', priority_matrix: 'not_urgent_important', status: 'todo', project_name: '健身计划', actual_duration: 0 },
+    ];
+
+    const sampleTransactions = [
+      { id: 1, type: 'income', amount: 15000, category_name: '工资', category_color: '#10b981', description: '本月工资', transaction_date: '2026-02-01' },
+      { id: 2, type: 'expense', amount: 35.5, category_name: '餐饮', category_color: '#f59e0b', description: '午餐', transaction_date: '2026-02-14' },
+      { id: 3, type: 'expense', amount: 120, category_name: '交通', category_color: '#3b82f6', description: '打车', transaction_date: '2026-02-13' },
+      { id: 4, type: 'expense', amount: 299, category_name: '购物', category_color: '#ef4444', description: '买书', transaction_date: '2026-02-12' },
+    ];
+
+    // Components
+    const TopNav = {
+      template: `
+        <header class="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50">
+          <div class="flex items-center justify-between h-full px-4">
+            <div class="flex items-center gap-3">
+              <button @click="$emit('toggle-sidebar')" class="p-2 rounded-lg hover:bg-gray-100">
+                <i data-lucide="menu" class="w-5 h-5 text-gray-600"></i>
+              </button>
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
+                  <i data-lucide="zap" class="w-5 h-5 text-white"></i>
+                </div>
+                <span class="text-xl font-bold text-gray-900">FocusFlow</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="$router.push('/timer')" class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100">
+                <i data-lucide="timer" class="w-5 h-5 text-gray-600"></i>
+                <span class="text-sm text-gray-700 hidden sm:block">专注</span>
+              </button>
+              <button class="p-2 rounded-lg hover:bg-gray-100">
+                <i data-lucide="user" class="w-5 h-5 text-gray-600"></i>
+              </button>
+            </div>
+          </div>
+        </header>
+      `
+    };
+
+    const Sidebar = {
+      props: ['collapsed'],
+      template: `
+        <aside class="fixed left-0 top-16 bottom-0 bg-white border-r border-gray-200 transition-all duration-300 z-40"
+          :class="collapsed ? 'w-16' : 'w-64'">
+          <nav class="p-2 space-y-1">
+            <router-link v-for="item in navItems" :key="item.path" :to="item.path"
+              class="flex items-center gap-3 px-3 py-3 rounded-lg transition-colors"
+              :class="$route.path === item.path ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'">
+              <i :data-lucide="item.icon" class="w-5 h-5 flex-shrink-0"></i>
+              <span class="text-sm font-medium whitespace-nowrap transition-opacity"
+                :class="{ 'opacity-0 w-0': collapsed, 'opacity-100': !collapsed }">{{ item.name }}</span>
+            </router-link>
+          </nav>
+        </aside>
+      `,
+      data() {
+        return {
+          navItems: [
+            { name: '计划管理', path: '/plans', icon: 'clipboard-list' },
+            { name: '项目管理', path: '/projects', icon: 'folder-kanban' },
+            { name: '专注计时', path: '/timer', icon: 'timer' },
+            { name: '数据统计', path: '/statistics', icon: 'bar-chart-3' },
+            { name: '记账', path: '/accounting', icon: 'wallet' },
+          ]
+        };
+      }
+    };
+
+    const PlansView = {
+      template: `
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">计划管理</h1>
+              <p class="text-gray-500 mt-1">管理你的任务和计划</p>
+            </div>
+            <button @click="showModal = true" class="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              新建计划
+            </button>
+          </div>
+          
+          <div class="bg-white p-3 rounded-lg border border-gray-200 flex items-center gap-2">
+            <button v-for="view in views" :key="view" @click="currentView = view"
+              class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              :class="currentView === view ? 'bg-primary-50 text-primary-600' : 'text-gray-600 hover:bg-gray-100'">
+              {{ view === 'list' ? '列表' : '看板' }}
+            </button>
+          </div>
+          
+          <div v-if="currentView === 'list'" class="space-y-3">
+            <div v-for="plan in plans" :key="plan.id" class="bg-white rounded-lg border border-gray-200 p-4 card-hover"
+              :style="{ borderLeftWidth: '4px', borderLeftColor: getPriorityColor(plan.priority_matrix) }">
+              <div class="flex items-start gap-3">
+                <input type="checkbox" :checked="plan.status === 'completed'" class="mt-1 w-5 h-5 rounded">
+                <div class="flex-1">
+                  <h4 class="font-medium text-gray-900" :class="{ 'line-through text-gray-400': plan.status === 'completed' }">{{ plan.title }}</h4>
+                  <p class="text-sm text-gray-500 mt-1">{{ plan.description }}</p>
+                  <div class="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                    <span class="px-2 py-0.5 rounded-full" :style="{ backgroundColor: getPriorityColor(plan.priority_matrix) + '20', color: getPriorityColor(plan.priority_matrix) }">
+                      {{ getPriorityLabel(plan.priority_matrix) }}
+                    </span>
+                    <span v-if="plan.project_name" class="flex items-center gap-1">
+                      <i data-lucide="folder-kanban" class="w-3 h-3"></i> {{ plan.project_name }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="grid grid-cols-2 gap-4">
+            <div v-for="(label, key) in priorityLabels" :key="key" class="bg-gray-100 rounded-lg p-4">
+              <div class="flex items-center gap-2 mb-4">
+                <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: getPriorityColor(key) }"></div>
+                <h3 class="font-medium text-gray-700">{{ label }}</h3>
+              </div>
+              <div class="space-y-3">
+                <div v-for="plan in plans.filter(p => p.priority_matrix === key)" :key="plan.id" 
+                  class="bg-white rounded-lg border border-gray-200 p-3">
+                  <h4 class="font-medium text-gray-900 text-sm">{{ plan.title }}</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      data() {
+        return {
+          currentView: 'list',
+          views: ['list', 'kanban'],
+          plans: samplePlans,
+          priorityLabels: {
+            'urgent_important': '紧急且重要',
+            'not_urgent_important': '重要不紧急',
+            'urgent_not_important': '紧急不重要',
+            'not_urgent_not_important': '不紧急不重要'
+          }
+        };
+      },
+      methods: {
+        getPriorityColor(p) {
+          const colors = { 'urgent_important': '#ef4444', 'not_urgent_important': '#f59e0b', 'urgent_not_important': '#3b82f6', 'not_urgent_not_important': '#6b7280' };
+          return colors[p] || '#6b7280';
+        },
+        getPriorityLabel(p) {
+          return this.priorityLabels[p] || p;
+        }
+      }
+    };
+
+    const ProjectsView = {
+      template: `
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">项目管理</h1>
+              <p class="text-gray-500 mt-1">组织和管理你的项目</p>
+            </div>
+            <button class="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              新建项目
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="project in projects" :key="project.id" class="bg-white rounded-xl border border-gray-200 overflow-hidden card-hover">
+              <div class="h-20 flex items-end p-4" :style="{ backgroundColor: project.color + '20' }">
+                <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm" :style="{ backgroundColor: project.color }">
+                  <i data-lucide="folder-kanban" class="w-6 h-6 text-white"></i>
+                </div>
+              </div>
+              <div class="p-4">
+                <h3 class="font-semibold text-gray-900">{{ project.name }}</h3>
+                <p class="text-sm text-gray-500 mt-1">{{ project.description }}</p>
+                <div class="mt-4">
+                  <div class="flex items-center justify-between text-sm mb-1">
+                    <span class="text-gray-500">进度</span>
+                    <span class="font-medium text-gray-900">{{ project.progress }}%</span>
+                  </div>
+                  <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500" :style="{ width: project.progress + '%', backgroundColor: project.color }"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4 mt-4 text-sm text-gray-500">
+                  <span class="flex items-center gap-1">
+                    <i data-lucide="clipboard-list" class="w-4 h-4"></i> {{ project.plan_count }} 计划
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      data() {
+        return { projects: sampleProjects };
+      }
+    };
+
+    const TimerView = {
+      template: `
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">专注计时</h1>
+              <p class="text-gray-500 mt-1">保持专注，提升效率</p>
+            </div>
+            <button @click="zenMode = true" class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              <i data-lucide="maximize-2" class="w-4 h-4"></i>
+              Zen模式
+            </button>
+          </div>
+          
+          <div class="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+            <div class="text-8xl font-mono font-bold text-gray-900 tracking-wider mb-8">{{ formattedTime }}</div>
+            <p class="mb-8 text-gray-500 italic">"{{ quote }}"</p>
+            <div class="flex items-center justify-center gap-4">
+              <button v-if="!isRunning" @click="startTimer" class="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-lg">
+                <i data-lucide="play" class="w-5 h-5"></i>
+                开始专注
+              </button>
+              <template v-else>
+                <button @click="pauseTimer" class="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                  <i data-lucide="pause" class="w-5 h-5"></i>
+                  暂停
+                </button>
+                <button @click="stopTimer" class="flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                  <i data-lucide="square" class="w-5 h-5"></i>
+                  结束
+                </button>
+              </template>
+            </div>
+            <div class="mt-8 flex items-center justify-center gap-2">
+              <button v-for="preset in [15, 25, 45, 60]" :key="preset" 
+                @click="setPreset(preset)"
+                class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                :class="{ 'bg-primary-50 border-primary-500 text-primary-600': selectedPreset === preset }">
+                {{ preset }}分钟
+              </button>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="clock" class="w-8 h-8 text-primary-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">1小时30分</div>
+              <div class="text-sm text-gray-500">今日专注时长</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="target" class="w-8 h-8 text-green-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">3</div>
+              <div class="text-sm text-gray-500">专注次数</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="trending-up" class="w-8 h-8 text-orange-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">85.5</div>
+              <div class="text-sm text-gray-500">平均专注度</div>
+            </div>
+          </div>
+          
+          <!-- Zen Mode Overlay -->
+          <div v-if="zenMode" class="fixed inset-0 z-[100] bg-gray-900 flex flex-col items-center justify-center">
+            <button @click="zenMode = false" class="absolute top-6 right-6 p-3 rounded-full bg-gray-800 text-gray-400 hover:text-white">
+              <i data-lucide="minimize-2" class="w-6 h-6"></i>
+            </button>
+            <div class="text-[10rem] font-mono font-bold text-white tracking-wider leading-none">{{ formattedTime }}</div>
+            <p class="mt-8 text-xl text-gray-400 italic max-w-lg mx-auto">"{{ quote }}"</p>
+            <button @click="stopTimer" class="mt-16 px-8 py-4 bg-red-500 hover:bg-red-600 text-white rounded-full text-lg font-medium flex items-center gap-2">
+              <i data-lucide="square" class="w-5 h-5"></i>
+              结束专注
+            </button>
+          </div>
+        </div>
+      `,
+      data() {
+        return {
+          elapsed: 0,
+          isRunning: false,
+          timer: null,
+          zenMode: false,
+          selectedPreset: null,
+          quote: '专注当下，成就未来。',
+          quotes: ['专注当下，成就未来。', '每一次专注，都是对自己的投资。', '保持专注，让时间更有价值。', '深度工作，创造卓越。']
+        };
+      },
+      computed: {
+        formattedTime() {
+          const h = Math.floor(this.elapsed / 3600).toString().padStart(2, '0');
+          const m = Math.floor((this.elapsed % 3600) / 60).toString().padStart(2, '0');
+          const s = (this.elapsed % 60).toString().padStart(2, '0');
+          return `${h}:${m}:${s}`;
+        }
+      },
+      mounted() {
+        this.quote = this.quotes[Math.floor(Math.random() * this.quotes.length)];
+      },
+      methods: {
+        startTimer() {
+          this.isRunning = true;
+          this.timer = setInterval(() => this.elapsed++, 1000);
+        },
+        pauseTimer() {
+          this.isRunning = false;
+          clearInterval(this.timer);
+        },
+        stopTimer() {
+          this.isRunning = false;
+          clearInterval(this.timer);
+          this.elapsed = 0;
+          this.zenMode = false;
+        },
+        setPreset(minutes) {
+          this.selectedPreset = minutes;
+        }
+      }
+    };
+
+    const StatisticsView = {
+      template: `
+        <div class="space-y-6 animate-fade-in">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">数据统计</h1>
+            <p class="text-gray-500 mt-1">查看你的生产力数据</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="clock" class="w-8 h-8 text-primary-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">1小时30分</div>
+              <div class="text-sm text-gray-500">今日专注</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="target" class="w-8 h-8 text-green-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">3</div>
+              <div class="text-sm text-gray-500">专注次数</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="trending-up" class="w-8 h-8 text-orange-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">¥15,000</div>
+              <div class="text-sm text-gray-500">总收入</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <i data-lucide="wallet" class="w-8 h-8 text-red-500 mx-auto mb-2"></i>
+              <div class="text-2xl font-bold text-gray-900">¥454.5</div>
+              <div class="text-sm text-gray-500">总支出</div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 class="font-semibold text-gray-900 mb-4">项目时间分布</h3>
+              <div class="space-y-3">
+                <div v-for="p in projects" :key="p.id" class="flex items-center gap-3">
+                  <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: p.color }"></div>
+                  <span class="flex-1 text-sm">{{ p.name }}</span>
+                  <div class="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full" :style="{ width: p.progress + '%', backgroundColor: p.color }"></div>
+                  </div>
+                  <span class="text-sm text-gray-500 w-12 text-right">{{ p.progress }}%</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 class="font-semibold text-gray-900 mb-4">专注热力图</h3>
+              <div class="grid grid-cols-12 gap-1">
+                <div v-for="i in 48" :key="i" class="aspect-square rounded"
+                  :class="getHeatmapClass(i)"></div>
+              </div>
+              <div class="flex items-center justify-end gap-2 mt-3 text-xs text-gray-500">
+                <span>少</span>
+                <div class="flex gap-0.5">
+                  <div class="w-3 h-3 rounded bg-gray-200"></div>
+                  <div class="w-3 h-3 rounded bg-primary-200"></div>
+                  <div class="w-3 h-3 rounded bg-primary-400"></div>
+                  <div class="w-3 h-3 rounded bg-primary-600"></div>
+                </div>
+                <span>多</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      data() {
+        return { projects: sampleProjects };
+      },
+      methods: {
+        getHeatmapClass(i) {
+          const levels = ['bg-gray-100', 'bg-primary-200', 'bg-primary-400', 'bg-primary-600'];
+          return levels[Math.floor(Math.random() * levels.length)];
+        }
+      }
+    };
+
+    const AccountingView = {
+      template: `
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">记账</h1>
+              <p class="text-gray-500 mt-1">管理你的收支</p>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <div class="text-2xl font-bold text-green-600">¥15,000.00</div>
+              <div class="text-sm text-gray-500">总收入</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <div class="text-2xl font-bold text-red-600">¥454.50</div>
+              <div class="text-sm text-gray-500">总支出</div>
+            </div>
+            <div class="bg-white rounded-lg border border-gray-200 p-4 text-center">
+              <div class="text-2xl font-bold text-green-600">¥14,545.50</div>
+              <div class="text-sm text-gray-500">结余</div>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <h3 class="font-semibold text-gray-900 mb-4">快速记账</h3>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div class="flex gap-2">
+                <button @click="newTransaction.type = 'expense'" 
+                  class="flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors"
+                  :class="newTransaction.type === 'expense' ? 'bg-red-50 border-red-500 text-red-600' : 'border-gray-200 text-gray-600'">支出</button>
+                <button @click="newTransaction.type = 'income'"
+                  class="flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors"
+                  :class="newTransaction.type === 'income' ? 'bg-green-50 border-green-500 text-green-600' : 'border-gray-200 text-gray-600'">收入</button>
+              </div>
+              <input v-model="newTransaction.amount" type="number" placeholder="金额" class="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-100 focus:border-primary-500">
+              <select v-model="newTransaction.category" class="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-100 focus:border-primary-500">
+                <option value="">选择分类</option>
+                <option value="餐饮">餐饮</option>
+                <option value="交通">交通</option>
+                <option value="购物">购物</option>
+              </select>
+              <input v-model="newTransaction.description" type="text" placeholder="备注" class="px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-100 focus:border-primary-500">
+              <button @click="addTransaction" class="flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                添加
+              </button>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-200">
+              <h3 class="font-semibold text-gray-900">交易记录</h3>
+            </div>
+            <div class="divide-y divide-gray-200">
+              <div v-for="t in transactions" :key="t.id" class="px-4 py-4 flex items-center justify-between hover:bg-gray-50">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full flex items-center justify-center" :style="{ backgroundColor: t.category_color + '20' }">
+                    <i data-lucide="shopping-bag" class="w-5 h-5" :style="{ color: t.category_color }"></i>
+                  </div>
+                  <div>
+                    <div class="font-medium text-gray-900">{{ t.description || t.category_name }}</div>
+                    <div class="text-sm text-gray-500">{{ t.transaction_date }}</div>
+                  </div>
+                </div>
+                <div class="font-semibold" :class="t.type === 'income' ? 'text-green-600' : 'text-red-600'">
+                  {{ t.type === 'income' ? '+' : '-' }}¥{{ t.amount.toFixed(2) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      data() {
+        return {
+          transactions: sampleTransactions,
+          newTransaction: { type: 'expense', amount: '', category: '', description: '' }
+        };
+      },
+      methods: {
+        addTransaction() {
+          if (!this.newTransaction.amount || !this.newTransaction.category) return;
+          this.transactions.unshift({
+            id: Date.now(),
+            type: this.newTransaction.type,
+            amount: parseFloat(this.newTransaction.amount),
+            category_name: this.newTransaction.category,
+            category_color: this.newTransaction.type === 'income' ? '#10b981' : '#f59e0b',
+            description: this.newTransaction.description,
+            transaction_date: new Date().toISOString().split('T')[0]
+          });
+          this.newTransaction = { type: 'expense', amount: '', category: '', description: '' };
+        }
+      }
+    };
+
+    // Router
+    const router = createRouter({
+      history: createWebHashHistory(),
+      routes: [
+        { path: '/', redirect: '/plans' },
+        { path: '/plans', component: PlansView },
+        { path: '/projects', component: ProjectsView },
+        { path: '/timer', component: TimerView },
+        { path: '/statistics', component: StatisticsView },
+        { path: '/accounting', component: AccountingView },
+      ]
+    });
+
+    // App
+    const App = {
+      components: { TopNav, Sidebar },
+      template: `
+        <div class="min-h-screen bg-gray-50">
+          <TopNav @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
+          <div class="flex">
+            <Sidebar :collapsed="sidebarCollapsed" />
+            <main class="flex-1 transition-all duration-300" :class="sidebarCollapsed ? 'ml-16' : 'ml-64'">
+              <div class="pt-16 px-6 py-6">
+                <router-view v-slot="{ Component }">
+                  <transition name="fade" mode="out-in">
+                    <component :is="Component" />
+                  </transition>
+                </router-view>
+              </div>
+            </main>
+          </div>
+        </div>
+      `,
+      data() {
+        return { sidebarCollapsed: false };
+      },
+      mounted() {
+        lucide.createIcons();
+      },
+      updated() {
+        lucide.createIcons();
+      }
+    };
+
+    createApp(App).use(router).mount('#app');
+  </script>
+</body>
+</html>
